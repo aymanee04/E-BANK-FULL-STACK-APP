@@ -21,6 +21,29 @@ pipeline {
             }
         }
 
+        stage('Start MySQL') {
+            steps {
+                sh '''
+                    docker run -d --name mysql-db --network jenkins-net \
+                        -e MYSQL_ROOT_PASSWORD=2004 \
+                        -e MYSQL_DATABASE=BANK_DB \
+                        mysql:8.0
+
+                    echo "Waiting for MySQL to become ready..."
+                    for i in $(seq 1 30); do
+                        if docker exec mysql-db mysqladmin ping -h localhost -uroot -p2004 --silent; then
+                            echo "MySQL is ready"
+                            exit 0
+                        fi
+                        echo "Not ready yet, waiting..."
+                        sleep 2
+                    done
+                    echo "MySQL did not become ready in time"
+                    exit 1
+                '''
+            }
+        }
+
         stage('Backend Test') {
             steps {
                 dir('eBank-backend') {
@@ -77,6 +100,7 @@ pipeline {
 
     post {
         always {
+            sh 'docker rm -f mysql-db || true'
             echo "Pipeline finished: ${currentBuild.currentResult}"
         }
     }
