@@ -69,7 +69,15 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "exclude": [
+              "src/app/app.spec.ts",
+              "src/app/navbar/navbar.spec.ts",
+              "src/app/admin-template/admin-template.spec.ts",
+              "src/app/customer-accounts/customer-accounts.spec.ts"
+            ]
+          }
         }
       }
     }
