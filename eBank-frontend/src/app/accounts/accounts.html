@@ -1,0 +1,108 @@
+<div class="container mt-2">
+  <div class="row">
+    <div class="col col-md-6">
+      <div class="card">
+        <div class="card-header">Accounts</div>
+        <div class="card-body">
+          <form [formGroup]="accountFormGroup" (ngSubmit)="handleSearchAccount()">
+            <div class="input-group">
+              <label class="input-group-text">Account ID:</label>
+              <input type="text" class="form-control" formControlName="accountId" />
+              <button class="btn btn-outline-success" type="submit">Search</button>
+            </div>
+          </form>
+          <div>
+            @if (accountObservable$ |async; as accountDetails) {
+            <div class="mb-2">
+              <label>Account ID :</label>
+              <label
+                ><strong>{{ accountDetails.accountId }}</strong></label
+              >
+            </div>
+            <div class="mb-2">
+              <label>Balance :</label>
+              <label>
+                <strong>{{ accountDetails.balance | number : '1.2-2' }}</strong>
+              </label>
+            </div>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                @for (op of accountDetails.accountOperationDTOS; track op.id) {
+                <tr>
+                  <td>{{ op.id }}</td>
+                  <td>{{ op.operationDate | date : 'dd-MM-yyyy:HH-mm-ss' }}</td>
+                  <td>{{ op.type }}</td>
+                  <td class="text-end">
+                    {{ op.amount | number : '1.2-2' }}
+                  </td>
+                </tr>
+                }
+              </tbody>
+            </table>
+            <!-- Pagination -->
+            <ul class="nav nav-pills">
+              @for (_ of [].constructor(accountDetails.totalPages); track $index) {
+              <li>
+                <a (click)="goToPage($index)" class="btn ms-1 mt-1">
+                  {{ $index + 1 }}
+                </a>
+              </li>
+              }
+            </ul>
+
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col col-md-6">
+      @if (accountObservable$) {
+      <div class="card">
+        <div class="card-header">Operations</div>
+        <div class="card-body">
+          <form
+            [formGroup]="operationFormGroup"
+            (ngSubmit)="handleAccountOperation()"
+            method="post"
+          >
+            <div class="input-group mb-3">
+              <label class="input-group-text">Operation Type:</label>
+              <select class="form-select" formControlName="operationType">
+                <option value="DEBIT">DEBIT</option>
+                <option value="CREDIT">CREDIT</option>
+                <option value="TRANSFER">TRANSFER</option>
+              </select>
+            </div>
+            @if (operationFormGroup.value.operationType=='TRANSFER') {
+            <div class="input-group mb-3">
+              <label class="input-group-text">Account Destination:</label>
+              <input type="number" class="form-control" formControlName="accountDestination" />
+            </div>
+            }
+            <div class="input-group mb-3">
+              <label class="input-group-text">Amount:</label>
+              <input type="number" class="form-control" formControlName="amount" />
+            </div>
+            <div class="input-group mb-3">
+              <label class="input-group-text">Description:</label>
+              <input type="text" class="form-control" formControlName="description" />
+            </div>
+            <div class="d-grid gap-2 mb-3">
+              <button class="btn btn-success" type="submit">Submit Operation</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      }
+    </div>
+  </div>
+</div>

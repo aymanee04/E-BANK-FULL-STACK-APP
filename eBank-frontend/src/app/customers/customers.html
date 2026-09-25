@@ -1,0 +1,54 @@
+<div class="container mt-4">
+  <h2>Customers List</h2>
+
+  @if (errorMessage) {
+  <div class="text-danger mb-2">
+    {{ errorMessage }}
+  </div>
+  } @if (searchFormGroup) {
+  <form class="" [formGroup]="searchFormGroup" (ngSubmit)="handleSearchCustomers()">
+    <input
+      type="text"
+      formControlName="keyword"
+      class="form-control mb-2"
+      placeholder="Search customers..."
+    />
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+  } @if (customers.length > 0) {
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      @for (customer of customers; track customer.id) {
+      <tr>
+        <td>{{ customer.id }}</td>
+        <td>{{ customer.name }}</td>
+        <td>{{ customer.email }}</td>
+        <div class="">
+          <td>
+            <button (click)="handleDeleteCustomer(customer)" class="btn btn-danger">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+          <td>
+            <button (click)="handleCustomerAccounts(customer)" class="btn btn-success">
+              <i class="bi bi-people"></i>
+            </button>
+          </td>
+        </div>
+      </tr>
+      }
+    </tbody>
+  </table>
+  } @else {
+  <p>Loading customers...</p>
+  }
+</div>

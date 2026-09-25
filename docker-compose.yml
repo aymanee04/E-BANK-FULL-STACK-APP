@@ -1,0 +1,39 @@
+services:
+  mysql-db:
+    image: mysql:latest
+    container_name: ebank-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "2004"
+      MYSQL_DATABASE: BANK_DB
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./eBank-backend
+    container_name: ebank-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    environment:
+      DB_USERNAME: root
+      DB_PASSWORD: "2004"
+      JWT_SECRET: 9faa372517ac1d389758d3750fc07acf00f542277f26fec1ce4593e93f64e338
+
+  frontend:
+      build: ./eBank-frontend
+      container_name: ebank-frontend
+      ports:
+        - "4200:80"
+      depends_on:
+        - backend
+volumes:
+  mysql_data:
