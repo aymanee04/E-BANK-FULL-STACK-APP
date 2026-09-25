@@ -68,7 +68,7 @@ pipeline {
         stage('Frontend Test') {
             steps {
                 dir('eBank-frontend') {
-                    sh 'npm test -- --watch=false --browsers=ChromeHeadless'
+                    sh 'npm test -- --watch=false'
                 }
             }
         }
