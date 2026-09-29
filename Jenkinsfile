@@ -80,7 +80,7 @@ pipeline {
                 dir('eBank-frontend') {
                     writeFile file: 'src/environments/environment.ts', text: """export const environment = {
   production: true,
-  apiUrl: 'http://${VM_HOST}:8080'
+  backendHost: 'http://${VM_HOST}:8080'
 };
 """
                 }
