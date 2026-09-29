@@ -122,6 +122,43 @@ pipeline {
                 }
             }
         }
+        stage('Smoke Test') {
+            steps {
+                withCredentials([
+                        sshUserPrivateKey(credentialsId: 'vm-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')
+                ]) {
+                    sh '''
+                VM_HOST=192.168.11.118
+
+                echo "Waiting for backend to become healthy..."
+                for i in $(seq 1 20); do
+                    STATUS=$(ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST \
+                        "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health")
+                    if [ "$STATUS" = "200" ]; then
+                        echo "Backend is healthy (HTTP 200)"
+                        break
+                    fi
+                    echo "Not ready yet (got $STATUS), waiting..."
+                    sleep 3
+                    if [ "$i" = "20" ]; then
+                        echo "Backend did not become healthy in time"
+                        exit 1
+                    fi
+                done
+
+                echo "Checking frontend..."
+                FRONTEND_STATUS=$(ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST \
+                    "curl -s -o /dev/null -w '%{http_code}' http://localhost:4200")
+                if [ "$FRONTEND_STATUS" = "200" ]; then
+                    echo "Frontend is up (HTTP 200)"
+                else
+                    echo "Frontend check failed (got $FRONTEND_STATUS)"
+                    exit 1
+                fi
+            '''
+                }
+            }
+        }
     }
 
     post {
