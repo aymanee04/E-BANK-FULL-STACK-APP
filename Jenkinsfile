@@ -122,12 +122,13 @@ pipeline {
                 }
             }
         }
-        stage('Smoke Test') {
-            steps {
-                withCredentials([
-                        sshUserPrivateKey(credentialsId: 'vm-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')
-                ]) {
-                    sh '''
+stage('Smoke Test') {
+    steps {
+        withCredentials([
+                sshUserPrivateKey(credentialsId: 'vm-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')
+        ]) {
+            sh '''
+                set +e
                 VM_HOST=192.168.11.118
 
                 echo "Waiting for backend to become healthy..."
@@ -156,9 +157,9 @@ pipeline {
                     exit 1
                 fi
             '''
-                }
-            }
         }
+    }
+}
     }
 
     post {
