@@ -478,6 +478,270 @@ real runtime secrets. It **will** become unavoidable the moment a "Deploy" stage
 
 ---
 
+## 17. CD part — deploying to an Ubuntu VM in VirtualBox
+
+**Goal:** move from "CI only" (build/test/dockerize) to a real deploy: Jenkins ships the built,
+tested images to a separate Ubuntu VM and runs them there, with secrets injected instead of
+hardcoded.
+
+### 17.1 Creating the VM
+
+- VirtualBox → New → Name `ebank-deploy`, Ubuntu Server ISO (24.04+ LTS), 64-bit, unattended
+  install skipped (so the SSH option can be picked manually).
+- Hardware: 2048–3072 MB RAM, 2 CPUs, 25 GB disk.
+- **Network: Bridged Adapter**, attached to the real Wi-Fi/Ethernet card — gives the VM its own
+  LAN IP (in our case `192.168.11.118`) so it's reachable like a real separate machine, not just
+  from the host.
+- During install: create a normal user, and **tick "Install OpenSSH server"** on the SSH screen —
+  required for Jenkins to connect later. Skip Ubuntu Pro and extra snaps.
+- Kernel install step can take 10–20 minutes over Wi-Fi (219 MB+ of packages) — this is normal,
+  not stuck, as long as the log keeps producing new lines.
+- After "Installation complete!" → Reboot Now → remove the ISO from Settings → Storage if the
+  installer boots again instead of the login prompt.
+- Confirm networking with `ip a` inside the VM (look for `inet` under `enp0s3`) and `ping <ip>`
+  from Windows PowerShell.
+
+### 17.2 Installing Docker on the VM
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-v2
+sudo usermod -aG docker $USER
+```
+
+**Gotcha:** group membership didn't apply even after a reboot. Fixed by re-running
+`sudo usermod -aG docker $USER`, confirming with `getent group docker` that the username was
+listed, then doing a full logout/login (not just reboot) before `docker ps` worked without `sudo`.
+
+Verified with:
+```bash
+docker ps   # empty table with headers only = correct, no error
+```
+
+### 17.3 SSH key authentication (Jenkins → VM, no password)
+
+**Generate the key pair inside the Jenkins container** (so the private key lives in the
+`jenkins_home` volume, persisted across container rebuilds):
+```powershell
+docker exec -it jenkins ssh-keygen -t ed25519 -f /var/jenkins_home/.ssh/id_ed25519 -N '""'
+```
+- `ed25519` → modern, secure key type.
+- Empty passphrase (`-N '""'`) → required so Jenkins can use it non-interactively.
+
+**Copy the public key onto the VM in one shot** (avoids manually pasting a long key string):
+```powershell
+docker exec -it jenkins sh -c "cat /var/jenkins_home/.ssh/id_ed25519.pub | ssh -o StrictHostKeyChecking=no aymane@192.168.11.118 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'"
+```
+Prompts once for the VM password (last time password auth is needed).
+
+**Verify key-only auth works, unambiguously:**
+```powershell
+docker exec jenkins ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=publickey -o BatchMode=yes aymane@192.168.11.118 "echo key-auth-confirmed"
+```
+`BatchMode=yes` forces an immediate failure instead of falling back to a password prompt, so a
+successful `key-auth-confirmed` print is proof the key really works.
+
+### 17.4 Jenkins credentials added
+
+**Manage Jenkins → Credentials → System → Global credentials:**
+- `vm-ssh-key` — kind "SSH Username with private key", username `aymane`, private key pasted
+  directly (from `docker exec jenkins cat /var/jenkins_home/.ssh/id_ed25519`).
+- `db-password` — kind "Secret text", value `2004`.
+- `jwt-secret` — kind "Secret text", value the existing JWT secret string.
+
+These replace the hardcoded `JWT_SECRET`/`DB_PASSWORD` values that originally lived in
+`docker-compose.yml` — the secret now only exists inside Jenkins' credential store and briefly
+inside a generated `.env` file on the VM (chmod 600, not world-readable).
+
+### 17.5 Deploy-specific compose file
+
+Key decision: **don't rebuild images on the VM.** The whole point of CI is that the exact image
+that was built and tested is the one that gets shipped — rebuilding on the target machine could
+silently produce a different artifact. So a second compose file was created that references
+already-built images by tag instead of a `build:` context.
+
+`docker-compose.deploy.yml`:
+```yaml
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: ebank-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: BANK_DB
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ebank-backend:${IMAGE_TAG}
+    container_name: ebank-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    environment:
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+
+  frontend:
+    image: ebank-frontend:${IMAGE_TAG}
+    container_name: ebank-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+```
+`${DB_PASSWORD}`, `${JWT_SECRET}`, `${IMAGE_TAG}` are substituted by docker compose from an
+`.env` file generated at deploy time — no secret is ever committed to this file.
+
+### 17.6 Actuator health endpoint (for the smoke test)
+
+Added to `eBank-backend/pom.xml`:
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+Added to `application.properties`:
+```properties
+management.endpoints.web.exposure.include=health
+management.endpoint.health.show-details=never
+```
+Also had to allow `/actuator/health` in the Spring Security config (`authorizeHttpRequests`) so
+it doesn't require a JWT — otherwise the smoke test would get `401` instead of `200`.
+
+### 17.7 Deploy stage (Jenkinsfile)
+
+```groovy
+stage('Deploy') {
+    steps {
+        withCredentials([
+            sshUserPrivateKey(credentialsId: 'vm-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+            string(credentialsId: 'db-password', variable: 'DB_PASSWORD'),
+            string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
+        ]) {
+            sh '''
+                VM_HOST=192.168.11.118
+
+                docker save ebank-backend:$BUILD_NUMBER ebank-frontend:$BUILD_NUMBER -o images.tar
+
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY images.tar $SSH_USER@$VM_HOST:~/
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY docker-compose.deploy.yml $SSH_USER@$VM_HOST:~/
+
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST "
+                    docker load -i images.tar &&
+                    rm images.tar &&
+                    printf 'IMAGE_TAG=%s\\nDB_PASSWORD=%s\\nJWT_SECRET=%s\\n' '$BUILD_NUMBER' '$DB_PASSWORD' '$JWT_SECRET' > .env &&
+                    chmod 600 .env &&
+                    docker compose -f docker-compose.deploy.yml --env-file .env up -d
+                "
+            '''
+        }
+    }
+}
+```
+- `withCredentials([...])` pulls the SSH key + both secrets into temporary env vars, only for
+  this block — nothing is ever written into the Jenkinsfile itself.
+- `docker save ... -o images.tar` bundles both built images into one file; `scp` ships it (plus
+  the deploy compose file) to the VM over the key-authenticated SSH connection.
+- Remote script: loads the images, deletes the tarball, writes a `.env` file with the real
+  secrets (`chmod 600` — only the VM user can read it), then runs `docker compose up -d`.
+- No registry (e.g. Docker Hub) used — this is the "save/load over SSH" approach, simplest for a
+  single VM. A registry-based pull is the natural next upgrade for multiple targets.
+
+**Known tradeoff, deliberately accepted for now:** secrets pass through as shell variables during
+this step, technically visible for a moment via `ps aux` on the Jenkins agent. Fine for local
+learning; production setups typically lock this down further.
+
+### 17.8 Smoke Test stage (Jenkinsfile)
+
+```groovy
+stage('Smoke Test') {
+    steps {
+        withCredentials([
+            sshUserPrivateKey(credentialsId: 'vm-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')
+        ]) {
+            sh '''
+                set +e
+                VM_HOST=192.168.11.118
+
+                echo "Waiting for backend to become healthy..."
+                for i in $(seq 1 20); do
+                    STATUS=$(ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST \
+                        "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health")
+                    if [ "$STATUS" = "200" ]; then
+                        echo "Backend is healthy (HTTP 200)"
+                        break
+                    fi
+                    echo "Attempt $i: not ready yet (got $STATUS), waiting..."
+                    sleep 3
+                    if [ "$i" = "20" ]; then
+                        echo "Backend did not become healthy in time"
+                        exit 1
+                    fi
+                done
+
+                echo "Checking frontend..."
+                FRONTEND_STATUS=$(ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST \
+                    "curl -s -o /dev/null -w '%{http_code}' http://localhost:4200")
+                if [ "$FRONTEND_STATUS" = "200" ]; then
+                    echo "Frontend is up (HTTP 200)"
+                else
+                    echo "Frontend check failed (got $FRONTEND_STATUS)"
+                    exit 1
+                fi
+            '''
+        }
+    }
+}
+```
+- Curls the health endpoint **from inside the VM** (via SSH), not from Jenkins directly — avoids
+  extra networking/firewall complications.
+- `-w '%{http_code}'` → curl prints only the HTTP status code.
+- Retries every 3s up to ~1 minute, since containers need a moment to actually start listening
+  after `docker compose up -d` returns.
+
+**Gotcha hit:** Jenkins' `sh` step runs with `set -e` by default — the very first non-200 curl
+result (expected during retries) killed the whole script instead of looping.
+**Fix:** add `set +e` as the first line of the script, so the loop's own `if`/`exit 1` logic
+controls what's actually fatal, instead of the shell auto-aborting on any non-zero exit.
+
+### 17.9 Gotcha: Deploy stage hung for 15+ minutes
+
+Diagnosed by SSHing into the VM mid-build and checking `ps aux` — found `docker load` had
+already finished, but `docker compose up -d` was still running. Checked `docker ps -a` on the VM
+and found **zero containers**, not even stopped ones — meaning compose was stuck on the very
+first step: pulling the `mysql:8.0` image from Docker Hub over the internet (separate from the
+LAN connection used for SSH/SCP, which was already working fine).
+
+**Fix:** manually ran `docker pull mysql:8.0` once on the VM to warm the image cache. After that,
+`docker compose up -d` completed in under a minute on subsequent runs, since MySQL no longer
+needs to be downloaded during the pipeline.
+
+### 17.10 Result
+
+Full pipeline green end-to-end: Checkout → Backend Build → Start MySQL → Backend Test →
+Frontend Install → Frontend Test → Frontend Build → Dockerize Backend → Dockerize Frontend →
+Deploy → Smoke Test. The app is reachable at `http://192.168.11.118:4200` (frontend) and
+`http://192.168.11.118:8080` (backend), running on a separate VM, deployed automatically by
+Jenkins with secrets injected via credentials rather than hardcoded.
+
+**Noted for later, not yet done:** password-based SSH login is still enabled on the VM alongside
+key auth — worth disabling once the pipeline is stable, to only allow key-based access.
+
+---
+
 ## Quick reference — useful commands used throughout
 
 ```powershell
@@ -498,4 +762,17 @@ docker run -d --name jenkins -p 8080:8080 -p 50000:50000 `
 
 # Get Jenkins admin password again if needed
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+
+# SSH into the VM from the Jenkins container (manual check)
+docker exec jenkins ssh -o StrictHostKeyChecking=no aymane@192.168.11.118 "<command>"
+
+# Check what's running on the VM (containers + processes)
+docker exec jenkins ssh -o StrictHostKeyChecking=no aymane@192.168.11.118 "docker ps -a"
+docker exec jenkins ssh -o StrictHostKeyChecking=no aymane@192.168.11.118 "ps aux | grep docker"
+
+# Check a container's logs on the VM
+docker exec jenkins ssh -o StrictHostKeyChecking=no aymane@192.168.11.118 "docker logs <container> --tail 50"
+
+# Pre-pull an image on the VM (avoids slow first-deploy downloads)
+docker exec jenkins ssh -o StrictHostKeyChecking=no aymane@192.168.11.118 "docker pull mysql:8.0"
 ```

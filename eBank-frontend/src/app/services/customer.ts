@@ -2,13 +2,15 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Customer } from '../model/customer.model';
+import {environment} from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root',
 })
 export class CustomerService {
   constructor(private http:HttpClient){}
-  backendHost: string = "http://localhost:8080";
+  private backendHost = `${environment.backendHost}`
+
   public getCustomers(): Observable<Customer[]>{
     return this.http.get<Customer[]>(this.backendHost + "/customers")
   }

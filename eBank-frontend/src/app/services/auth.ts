@@ -2,13 +2,14 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { jwtDecode } from 'jwt-decode';
+import {environment} from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root',
 })
 export class Auth {
 
-
+  private backendHost = `${environment.backendHost}`
 
   IsAuthenticated: boolean = false;
   roles: any;
@@ -21,7 +22,7 @@ export class Auth {
       headers: new HttpHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
     }
     let params = new HttpParams().set("username", username).set("password", password);
-    return this.http.post("http://localhost:8080/auth/login", params, options);
+    return this.http.post(this.backendHost+"/auth/login", params, options);
   }
   LoadProfile(data: any) {
     this.IsAuthenticated = true;
