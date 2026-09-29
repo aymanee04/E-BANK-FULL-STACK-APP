@@ -25,6 +25,7 @@ services:
       DB_USERNAME: root
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      APP_CORS_ALLOWED_ORIGIN: ${APP_CORS_ALLOWED_ORIGIN}
 
   frontend:
     image: ebank-frontend:${IMAGE_TAG}

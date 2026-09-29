@@ -27,6 +27,7 @@ services:
       DB_USERNAME: root
       DB_PASSWORD: "2004"
       JWT_SECRET: 9faa372517ac1d389758d3750fc07acf00f542277f26fec1ce4593e93f64e338
+      APP_CORS_ALLOWED_ORIGIN: http://localhost:4200
 
   frontend:
       build: ./eBank-frontend

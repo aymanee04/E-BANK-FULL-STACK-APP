@@ -40,6 +40,9 @@ public class SecurityConfig {
     @Value("${jwt.secret}")
     private String secretKey;
 
+    @Value("${app.cors.allowed-origin:http://localhost:4200}")
+    private String allowedOrigin;
+
 
     @Bean
     public InMemoryUserDetailsManager inMemoryUserDetailsManager() {
@@ -85,7 +88,7 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
-        corsConfiguration.addAllowedOrigin("*"); // Allow all origins
+        corsConfiguration.addAllowedOrigin(allowedOrigin); // Allow the specified origin
         corsConfiguration.addAllowedMethod("*"); // Allow all HTTP methods
         corsConfiguration.addAllowedHeader("*"); // Allow all headers
 

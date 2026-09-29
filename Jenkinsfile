@@ -114,7 +114,7 @@ pipeline {
                 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST "
                     docker load -i images.tar &&
                     rm images.tar &&
-                    printf 'IMAGE_TAG=%s\\nDB_PASSWORD=%s\\nJWT_SECRET=%s\\n' '$BUILD_NUMBER' '$DB_PASSWORD' '$JWT_SECRET' > .env &&
+                    printf 'IMAGE_TAG=%s\\\\nDB_PASSWORD=%s\\\\nJWT_SECRET=%s\\\\nAPP_CORS_ALLOWED_ORIGIN=%s\\\\n' '$BUILD_NUMBER' '$DB_PASSWORD' '$JWT_SECRET' "http://$VM_HOST:4200" > .env &&
                     chmod 600 .env &&
                     docker compose -f docker-compose.deploy.yml --env-file .env up -d
                 "
