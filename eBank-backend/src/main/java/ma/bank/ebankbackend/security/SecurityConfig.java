@@ -60,6 +60,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                  .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(ar->ar.requestMatchers("/auth/login/**").permitAll())
+                 .authorizeHttpRequests(ar -> ar.requestMatchers(("/actuator/health")).permitAll())
                 .authorizeHttpRequests(ar->ar.anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
 

@@ -1,18 +1,23 @@
 package ma.bank.ebankbackend.web;
 
+import ma.bank.ebankbackend.dtos.CustomerDTO;
+import ma.bank.ebankbackend.services.BankAccountService;
 import org.junit.Assert;
-import org.junit.Test;
 import org.junit.Before;
+import org.junit.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-//import static org.mockito.Mockito.*;
+
+import java.util.List;
+
+import static org.mockito.Mockito.*;
 
 public class CustomerRestControllerTest {
     @Mock
-    ma.bank.ebankbackend.services.BankAccountService bankAccountService;
+    BankAccountService bankAccountService;
     @InjectMocks
-    ma.bank.ebankbackend.web.CustomerRestController customerRestController;
+    CustomerRestController customerRestController;
 
     @Before
     public void setUp() {
@@ -21,42 +26,42 @@ public class CustomerRestControllerTest {
 
     @Test
     public void testCustomers() throws Exception {
-        when(bankAccountService.ListCustomers()).thenReturn(java.util.List.of(new ma.bank.ebankbackend.dtos.CustomerDTO()));
+        when(bankAccountService.ListCustomers()).thenReturn(List.of(new CustomerDTO()));
 
-        java.util.List<ma.bank.ebankbackend.dtos.CustomerDTO> result = customerRestController.customers();
-        Assert.assertEquals(java.util.List.of(new ma.bank.ebankbackend.dtos.CustomerDTO()), result);
+        List<CustomerDTO> result = customerRestController.customers();
+        Assert.assertEquals(List.of(new CustomerDTO()), result);
     }
 
     @Test
     public void testSearchCustomers() throws Exception {
-        when(bankAccountService.searchCustomers(anyString())).thenReturn(java.util.List.of(new ma.bank.ebankbackend.dtos.CustomerDTO()));
+        when(bankAccountService.searchCustomers(anyString())).thenReturn(List.of(new CustomerDTO()));
 
-        java.util.List<ma.bank.ebankbackend.dtos.CustomerDTO> result = customerRestController.searchCustomers("keyword");
-        Assert.assertEquals(java.util.List.of(new ma.bank.ebankbackend.dtos.CustomerDTO()), result);
+        List<CustomerDTO> result = customerRestController.searchCustomers("keyword");
+        Assert.assertEquals(List.of(new CustomerDTO()), result);
     }
 
     @Test
     public void testGetCustomerById() throws Exception {
-        when(bankAccountService.getCustomer(anyLong())).thenReturn(new ma.bank.ebankbackend.dtos.CustomerDTO());
+        when(bankAccountService.getCustomer(anyLong())).thenReturn(new CustomerDTO());
 
-        ma.bank.ebankbackend.dtos.CustomerDTO result = customerRestController.getCustomerById(Long.valueOf(1));
-        Assert.assertEquals(new ma.bank.ebankbackend.dtos.CustomerDTO(), result);
+        CustomerDTO result = customerRestController.getCustomerById(Long.valueOf(1));
+        Assert.assertEquals(new CustomerDTO(), result);
     }
 
     @Test
     public void testSaveCustomer() throws Exception {
-        when(bankAccountService.saveCustomer(any(ma.bank.ebankbackend.dtos.CustomerDTO.class))).thenReturn(new ma.bank.ebankbackend.dtos.CustomerDTO());
+        when(bankAccountService.saveCustomer(any(CustomerDTO.class))).thenReturn(new CustomerDTO());
 
-        ma.bank.ebankbackend.dtos.CustomerDTO result = customerRestController.saveCustomer(new ma.bank.ebankbackend.dtos.CustomerDTO());
-        Assert.assertEquals(new ma.bank.ebankbackend.dtos.CustomerDTO(), result);
+        CustomerDTO result = customerRestController.saveCustomer(new CustomerDTO());
+        Assert.assertEquals(new CustomerDTO(), result);
     }
 
     @Test
     public void testUpdateCustomer() throws Exception {
-        when(bankAccountService.updateCustomer(any(ma.bank.ebankbackend.dtos.CustomerDTO.class))).thenReturn(new ma.bank.ebankbackend.dtos.CustomerDTO());
+        when(bankAccountService.updateCustomer(any(CustomerDTO.class))).thenReturn(new CustomerDTO());
 
-        ma.bank.ebankbackend.dtos.CustomerDTO result = customerRestController.updateCustomer(Long.valueOf(1), new ma.bank.ebankbackend.dtos.CustomerDTO());
-        Assert.assertEquals(new ma.bank.ebankbackend.dtos.CustomerDTO(), result);
+        CustomerDTO result = customerRestController.updateCustomer(Long.valueOf(1), new CustomerDTO());
+        Assert.assertEquals(new CustomerDTO(), result);
     }
 
     @Test

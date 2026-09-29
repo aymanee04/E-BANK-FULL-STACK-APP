@@ -96,6 +96,32 @@ pipeline {
                 }
             }
         }
+        stage('Deploy') {
+            steps {
+                withCredentials([
+                        sshUserPrivateKey(credentialsId: 'vm-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                        string(credentialsId: 'db-password', variable: 'DB_PASSWORD'),
+                        string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
+                ]) {
+                    sh '''
+                VM_HOST=192.168.11.118
+
+                docker save ebank-backend:$BUILD_NUMBER ebank-frontend:$BUILD_NUMBER -o images.tar
+
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY images.tar $SSH_USER@$VM_HOST:~/
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY docker-compose.deploy.yml $SSH_USER@$VM_HOST:~/
+
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@$VM_HOST "
+                    docker load -i images.tar &&
+                    rm images.tar &&
+                    printf 'IMAGE_TAG=%s\\nDB_PASSWORD=%s\\nJWT_SECRET=%s\\n' '$BUILD_NUMBER' '$DB_PASSWORD' '$JWT_SECRET' > .env &&
+                    chmod 600 .env &&
+                    docker compose -f docker-compose.deploy.yml --env-file .env up -d
+                "
+            '''
+                }
+            }
+        }
     }
 
     post {
