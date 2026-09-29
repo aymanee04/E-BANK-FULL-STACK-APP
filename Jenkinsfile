@@ -1,6 +1,8 @@
 pipeline {
     agent any
 
+    environment { VM_HOST = '192.168.11.118' }
+
     tools {
         nodejs 'node20'
     }
@@ -73,6 +75,18 @@ pipeline {
             }
         }
 
+        stage('Configure Frontend Environment') {
+            steps {
+                dir('eBank-frontend') {
+                    writeFile file: 'src/environments/environment.ts', text: """export const environment = {
+  production: true,
+  apiUrl: 'http://${VM_HOST}:8080'
+};
+"""
+                }
+            }
+        }
+
         stage('Frontend Build') {
             steps {
                 dir('eBank-frontend') {
@@ -104,7 +118,7 @@ pipeline {
                         string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
                 ]) {
                     sh '''
-                VM_HOST=192.168.11.118
+                
 
                 docker save ebank-backend:$BUILD_NUMBER ebank-frontend:$BUILD_NUMBER -o images.tar
 
@@ -129,7 +143,7 @@ stage('Smoke Test') {
         ]) {
             sh '''
                 set +e
-                VM_HOST=192.168.11.118
+                
 
                 echo "Waiting for backend to become healthy..."
                 for i in $(seq 1 20); do
